@@ -1,6 +1,9 @@
 import type { ApiResponse, RsvpInput, RsvpData, WishData, WishInput } from '../types';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+// If VITE_API_URL is provided, use it. Otherwise, use relative '/api' which works seamlessly on Vercel Serverless Functions and local proxy.
+const API_BASE = import.meta.env.VITE_API_URL 
+  ? (import.meta.env.VITE_API_URL.endsWith('/api') ? import.meta.env.VITE_API_URL : `${import.meta.env.VITE_API_URL}/api`)
+  : '/api';
 
 class ApiError extends Error {
   statusCode: number;
