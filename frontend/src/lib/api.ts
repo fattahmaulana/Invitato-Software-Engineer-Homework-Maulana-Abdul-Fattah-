@@ -1,9 +1,9 @@
 import type { ApiResponse, RsvpInput, RsvpData, WishData, WishInput } from '../types';
+import { supabase, isSupabaseConfigured } from './supabase';
 
-// If VITE_API_URL is provided, use it. Otherwise, use relative '/api' which works seamlessly on Vercel Serverless Functions and local proxy.
-const API_BASE = import.meta.env.VITE_API_URL 
+const API_BASE = import.meta.env.VITE_API_URL
   ? (import.meta.env.VITE_API_URL.endsWith('/api') ? import.meta.env.VITE_API_URL : `${import.meta.env.VITE_API_URL}/api`)
-  : '/api';
+  : 'http://localhost:3001/api';
 
 class ApiError extends Error {
   statusCode: number;
@@ -62,6 +62,42 @@ async function fetchApi<T>(
 // ---- RSVP API ----
 
 export async function submitRSVP(input: RsvpInput): Promise<ApiResponse<RsvpData>> {
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('rsvp')
+        .insert([
+          {
+            name: input.name.trim(),
+            attendance: input.attendance,
+            guest_count: input.attendance === 'hadir' ? (input.guestCount || 1) : 0,
+          },
+        ])
+        .select()
+        .single();
+
+      if (error) {
+        throw new ApiError(error.message, 400);
+      }
+
+      return {
+        success: true,
+        message: 'RSVP berhasil dikirim',
+        data: {
+          id: data.id,
+          name: data.name,
+          attendance: data.attendance,
+          guestCount: data.guest_count,
+          createdAt: data.created_at,
+        },
+      };
+    } catch (err: unknown) {
+      if (err instanceof ApiError) throw err;
+      throw new ApiError('Gagal menyimpan RSVP ke database', 500);
+    }
+  }
+
+  // Fallback to Express backend API
   return fetchApi<RsvpData>('/rsvp', {
     method: 'POST',
     body: JSON.stringify(input),
@@ -71,10 +107,73 @@ export async function submitRSVP(input: RsvpInput): Promise<ApiResponse<RsvpData
 // ---- Wishes API ----
 
 export async function getWishes(): Promise<ApiResponse<WishData[]>> {
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('wishes')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        throw new ApiError(error.message, 400);
+      }
+
+      const formattedData: WishData[] = (data || []).map((w: Record<string, unknown>) => ({
+        id: w.id as number,
+        name: w.name as string,
+        message: w.message as string,
+        createdAt: w.created_at as string,
+      }));
+
+      return {
+        success: true,
+        data: formattedData,
+      };
+    } catch (err: unknown) {
+      if (err instanceof ApiError) throw err;
+      throw new ApiError('Gagal memuat ucapan dari database', 500);
+    }
+  }
+
+  // Fallback to Express backend API
   return fetchApi<WishData[]>('/wishes');
 }
 
 export async function submitWish(input: WishInput): Promise<ApiResponse<WishData>> {
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('wishes')
+        .insert([
+          {
+            name: input.name.trim(),
+            message: input.message.trim(),
+          },
+        ])
+        .select()
+        .single();
+
+      if (error) {
+        throw new ApiError(error.message, 400);
+      }
+
+      return {
+        success: true,
+        message: 'Ucapan berhasil dikirim',
+        data: {
+          id: data.id,
+          name: data.name,
+          message: data.message,
+          createdAt: data.created_at,
+        },
+      };
+    } catch (err: unknown) {
+      if (err instanceof ApiError) throw err;
+      throw new ApiError('Gagal mengirim ucapan ke database', 500);
+    }
+  }
+
+  // Fallback to Express backend API
   return fetchApi<WishData>('/wishes', {
     method: 'POST',
     body: JSON.stringify(input),
